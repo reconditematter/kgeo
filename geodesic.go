@@ -75,7 +75,7 @@ func (g Geodesic) Direct(lat1, lon1, azi1, s12 float64) Solution {
 	//
 	{
 		// adjust near-polar latitudes
-		const ε = 1.0 / (1 << 52)
+		const ε = 1.0 / (1 << 38)
 		if math.Abs(lat1) > 90*(1-ε) {
 			lat1 = math.Copysign(90*(1-ε), lat1)
 		}
@@ -137,6 +137,37 @@ func (g Geodesic) Direct(lat1, lon1, azi1, s12 float64) Solution {
 	azi2 := α2 * (180 / math.Pi)
 	//
 	return Solution{Lat1: nnz(lat1), Lon1: nnz(lon1), Azi1: nnz(azi1), Lat2: nnz(lat2), Lon2: nnz(lon2), Azi2: nnz(azi2), S12: nnz(s12)}
+}
+
+func (g Geodesic) hybrid(sinβ1, cosβ1, sinβ2, cosβ2, sinα1, cosα1 float64) (float64, float64) {
+	b := g.b
+	ep2 := g.ep2
+	// solve triangle NEA
+	α0 := math.Atan2(sinα1*cosβ1, math.Hypot(cosα1, sinα1*sinβ1))
+	sinα0, cosα0 := math.Sincos(α0)
+	σ1 := math.Atan2(sinβ1, cosα1*cosβ1)
+	// solve triangle NEB
+	α2 := math.Atan2(sinα0, math.Sqrt(sq(cosα1*cosβ1)+(cosβ2-cosβ1)*(cosβ2+cosβ1)))
+	cosα2 := math.Cos(α2)
+	σ2 := math.Atan2(sinβ2, cosα2*cosβ2)
+	// determine s12 and λ12
+	k2 := ep2 * cosα0 * cosα0
+	tt := math.Sqrt(1 + k2)
+	ε := (tt - 1) / (tt + 1)
+	A1 := seriesA1(ε)
+	C1 := seriesC1(ε)
+	I1σ1 := A1 * (σ1 + sumSin(σ1, C1))
+	s1 := b * I1σ1
+	I1σ2 := A1 * (σ2 + sumSin(σ2, C1))
+	s2 := b * I1σ2
+	s12 := s2 - s1
+	//
+	return α2, s12
+}
+
+// sq -- square
+func sq(x float64) float64 {
+	return x * x
 }
 
 // nnz -- no negative zero
